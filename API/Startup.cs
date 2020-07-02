@@ -2,7 +2,9 @@ using System.Linq;
 using API.Errors;
 using API.Extensions;
 using API.Middleware;
+using Core.Interfaces;
 using Infrastructure.Identity;
+using Infrastructure.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
@@ -27,11 +29,12 @@ namespace API
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddControllers(); 
+            services.AddScoped<ITokenService, TokenService>();
             services.AddDbContext<AppIdentityDbContext>(x =>
             {
                 x.UseSqlite(_config.GetConnectionString("IdentityConnection"));
             });
-            services.AddIdentityServices();
+            services.AddIdentityServices(_config);
 
             services.Configure<ApiBehaviorOptions>(options => {
                 options.InvalidModelStateResponseFactory = actionContext => 
@@ -51,6 +54,26 @@ namespace API
 
             services.AddSwaggerGen(c => {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "User System API", Version = "v1" });
+                var securitySchema = new OpenApiSecurityScheme
+                {
+                    Description = "JWT Auth Bearer Scheme", 
+                    Name = "Authorization", 
+                    In = ParameterLocation.Header,
+                    Type = SecuritySchemeType.Http,
+                    Scheme = "bearer", 
+                    Reference = new OpenApiReference
+                    {
+                        Type = ReferenceType.SecurityScheme, 
+                        Id = "Bearer"
+                    }
+                };
+
+                c.AddSecurityDefinition("Bearer", securitySchema);
+                var securityRequirement = new OpenApiSecurityRequirement
+                    {
+                        {securitySchema, new[] {"Bearer"}}
+                    };
+                c.AddSecurityRequirement(securityRequirement);
             });
         }
 
@@ -65,6 +88,7 @@ namespace API
 
             app.UseRouting();
 
+            app.UseAuthentication();
             app.UseAuthorization();
 
             app.UseSwagger();
